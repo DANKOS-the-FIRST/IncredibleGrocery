@@ -7,45 +7,31 @@ using UnityEngine.UI;
 public class SettingsMenu : MonoBehaviour
 {
     public static bool GameIsPaused = false;
-
-    public GameObject pauseMenuUI;
-    // Update is called once per frame
-    void Update()
+    
+    public GameObject settingsMenuUI;
+    
+    public void ShowSettings()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            if (GameIsPaused)
-            {
-                Resume();
-            }
-            else
-            {
-                Pause();
-            }
-        }
+        Pause();
     }
 
-    public void Resume()
+    public void ExitSettings()
     {
-        pauseMenuUI.SetActive(false);
+        Resume();
+    }
+    
+    private void Resume()
+    {
+        settingsMenuUI.SetActive(false);
         Time.timeScale = 1f;
         GameIsPaused = false;
     }
 
-    void Pause()
+    private void Pause()
     {
-        pauseMenuUI.SetActive(true);
+        settingsMenuUI.SetActive(true);
         Time.timeScale = 0f;
         GameIsPaused = true;
     }
 
-    public void SoundsChangeMode()
-    {
-        Debug.Log("Changing sound mode ...");
-    }
-
-    public void MusicChangeMode()
-    {
-        Debug.Log("Changing music mode...");
-    }
 }
