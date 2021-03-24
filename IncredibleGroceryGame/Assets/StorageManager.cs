@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Dynamic;
 using System.Linq;
+using System.Security.Cryptography;
+using Unity.Mathematics;
 using UnityEditor.EditorTools;
 using UnityEngine;
 using UnityEngine.UI;
@@ -17,23 +19,23 @@ public static class ButtonExtension
             OnClick (param);
         });
     }
+    public static void MakeTranslucent(Image img, bool make)
+    {
+        var tempColor = img.color;
+        tempColor.a = make ? 0.5f : 1f;
+        img.color = tempColor;
+    }
 }
 public class StorageManager : MonoBehaviour
 {
-    public static void MakeTranslucent(Button btn, bool make)
-    {
-        var image = btn.image;
-        var tempColor = image.color;
-        tempColor.a = make ? 0.5f : 1f;
-        image.color = tempColor;
-    }
+
 
     public class Item
     {
         private bool _isSelected = false;
         public int Code;
         public Button Button;
-
+        private GameObject _markSign = null;
         public Item(Button btn, int cd)
         {
             Code = cd;
@@ -41,23 +43,90 @@ public class StorageManager : MonoBehaviour
         }
 
         public bool IsSelected() => _isSelected;
-        public int Select()
+        public int Select(GameObject marksign)
         {
             _isSelected = !_isSelected;
-            MakeTranslucent(Button, _isSelected);
+            ButtonExtension.MakeTranslucent(Button.image, _isSelected);
+            if (_markSign == null)
+            {
+                _markSign = Instantiate(marksign);
+                _markSign.transform.parent = this.Button.transform;
+                _markSign.transform.position = this.Button.transform.position;
+                _markSign.GetComponent<Image>().enabled = true;
+            }
+
+            else
+            {
+                Destroy(_markSign);
+                _markSign = null;
+            }
             return _isSelected ? 1 : -1;
         }
 
         public Image GetImage() => this.Button.image;
     }
+
+    public class Cloud
+    {
+        private GameObject _cloudObject;
+        private List<Image> _images = new List<Image>();
+        private List<int> _codes = new List<int>();
+        private List<GameObject> _signs = new List<GameObject>();
+        public Cloud(GameObject cloudObject)
+        {
+            _cloudObject = cloudObject;
+            for (int i = 0; i < 3; i++)
+            {
+                Image cloudImage = _cloudObject.transform.GetChild(i).GetComponent<Image>();
+                cloudImage.enabled = false;
+                _images.Add(cloudImage);
+            }
+        }
+
+        public int CheckCorrectAnswers(List<int> correctAnswers, GameObject correctMark, GameObject wrongMark)
+        {
+            int ret = 0;
+            for (int i = 0; i < _codes.Count; i++)
+            {
+                ButtonExtension.MakeTranslucent(_images[i], true);
+
+                if (correctAnswers.Exists(x => x == _codes[i]))
+                {
+                    _signs.Add(Instantiate(correctMark));
+                    ret++;
+                }
+                else
+                    _signs.Add(Instantiate(wrongMark));
+
+                int lastIndex = _signs.Count - 1;
+                _signs[lastIndex].transform.parent = this._images[i].transform;
+                _signs[lastIndex].transform.position = this._images[i].transform.position;
+                _signs[lastIndex].GetComponent<Image>().enabled = true;
+            }
+            return ret;
+        }
+        public void AddImageToCloud(Image img, int code)
+        {
+            _codes.Add(code);
+            _images[_codes.Count - 1].sprite = img.sprite;
+            _images[_codes.Count - 1].enabled = true;
+        }
+    }
+    
     private List<Item> _allItems = new List<Item>();
     private int _selecteditems = 0;
     private List<int> _orderList;
+    private List<int> _answersList;
     private int _currentOrderSize;
+
+    private Cloud _orderCloud, _answersCloud;
+    
     public GameObject storageCanvas;
     public Button sellButton;
     public GameObject OrderCloudGameObject;
-    
+    public GameObject AnswersCloudGameObject;
+    public GameObject MarkSignCorrect;
+    public GameObject MarkSignWrong;
     void Start()
     {
         for (int i = 0; i < storageCanvas.transform.childCount - 1; i++ )
@@ -67,12 +136,17 @@ public class StorageManager : MonoBehaviour
             _allItems[i].Button.AddEventListener(code, ItemClicked);
         }
 
-        for (int i = 0; i < 3; i++)
-        {
-            Image cloudImage = OrderCloudGameObject.transform.GetChild(i).GetComponent<Image>();
-            cloudImage.enabled = false;
-        }
-        MakeTranslucent(sellButton, true);
+        // for (int i = 0; i < 3; i++)
+        // {
+        //     Image cloudImage1 = OrderCloudGameObject.transform.GetChild(i).GetComponent<Image>();
+        //     Image cloudImage2 = AnswersCloudGameObject.transform.GetChild(i).GetComponent<Image>();
+        //     cloudImage1.enabled = false;
+        //     cloudImage2.enabled = false;
+        // }
+
+        _orderCloud = new Cloud(OrderCloudGameObject);
+        _answersCloud = new Cloud(AnswersCloudGameObject); 
+        ButtonExtension.MakeTranslucent(sellButton.image, true);
         sellButton.interactable = false;
         NewCustomerOrder();
     }
@@ -81,6 +155,7 @@ public class StorageManager : MonoBehaviour
     {
         _currentOrderSize = new Random().Next(1, 4);
         _orderList = new List<int>();
+        _answersList = new List<int>();
         Debug.Log("Order size = " + _currentOrderSize);
         Debug.Log("Numbers of order items:");
         Random rand = new Random();
@@ -94,49 +169,62 @@ public class StorageManager : MonoBehaviour
             _orderList.Add(newNumber);
             Debug.Log("Item number = " + _orderList[i]);
         }
-        
-        // for (int i = 0; i < _orderList.Count; i++)
-        // {
-        //     Image cloudImage = OrderCloudGameObject.transform.GetChild(i).GetComponent<Image>();
-        //     Debug.Log("BEFORE: cloudImage.enabled = " + cloudImage.enabled);
-        //     cloudImage.enabled = false;
-        //     Debug.Log("AFTER: cloudImage.enabled = " + cloudImage.enabled);
-        // }
-        for (int i = 0; i < _orderList.Count; i++)
+
+        FillCloudWithItems(_orderCloud, _orderList);
+    }
+
+    private void FillCloudWithItems(Cloud cloud, List<int> itemsNumbers)
+    {
+        for (int i = 0; i < itemsNumbers.Count; i++)
         {
-            Debug.Log("Item image number " + _orderList[i] + " added to cloud");
-            Image cloudImage = OrderCloudGameObject.transform.GetChild(i).GetComponent<Image>();
-            cloudImage.sprite = _allItems[_orderList[i] - 1].GetImage().sprite;
-            cloudImage.enabled = true;
+            // Image cloudImage = cloud.transform.GetChild(i).GetComponent<Image>();
+            // cloudImage.sprite = _allItems[itemsNumbers[i] - 1].GetImage().sprite;
+            cloud.AddImageToCloud(_allItems[itemsNumbers[i] - 1].GetImage(), itemsNumbers[i]);
+            //cloudImage.enabled = true;
         }
     }
-    
+
+    public void SellClicked()
+    {
+        FillCloudWithItems(_answersCloud, _answersList);
+        _answersCloud.CheckCorrectAnswers(_orderList, MarkSignCorrect, MarkSignWrong);
+        //AnswersCloudGameObject.transform;
+    }
     void ItemClicked (int itemNumber)
     {
-        if (_selecteditems < _currentOrderSize ||
-            (_selecteditems == _currentOrderSize &&
-             _allItems[itemNumber - 1].IsSelected()))
-                _selecteditems += _allItems[itemNumber - 1].Select();
-
+        // Make item selected/deselected
+        // Add/delete item number from _answersList after selection/deselction
+        if (_selecteditems < _currentOrderSize)
+        {
+           _selecteditems += _allItems[itemNumber - 1].Select(MarkSignCorrect); 
+           _answersList.Add(itemNumber);
+        }
+        else if (_selecteditems == _currentOrderSize &&
+            _allItems[itemNumber - 1].IsSelected())
+        {
+            _selecteditems += _allItems[itemNumber - 1].Select(MarkSignCorrect);
+            _answersList.Remove(itemNumber);
+        }
         
+        // Activate/deactivate Sell button according to selected elements
         if (_selecteditems == _currentOrderSize)
         {
-            MakeTranslucent(sellButton, false);
+            ButtonExtension.MakeTranslucent(sellButton.image, false);
             sellButton.interactable = true;
         }
         else
         {
-            MakeTranslucent(sellButton, true);
+            ButtonExtension.MakeTranslucent(sellButton.image, true);
             sellButton.interactable = false;
         }
     }
 
-    public void HideCloud()
+    private void HideCloud(GameObject cloud)
     {
         // There we need to disable visibility of all items in cloud
-        for (int i = 0; i < _orderList.Count; i++)
+        for (int i = 0; i < 3; i++)
         {
-            Image cloudImage = OrderCloudGameObject.transform.GetChild(i).GetComponent<Image>();
+            Image cloudImage = cloud.transform.GetChild(i).GetComponent<Image>();
             cloudImage.enabled = false;
         }
     }
