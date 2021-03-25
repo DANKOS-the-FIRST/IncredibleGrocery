@@ -71,9 +71,9 @@ public class AudioManager : MonoBehaviour
     private void UpdateAudio()
     {
         backgroundMusicAudio.volume = _musicEnabled;
-        foreach (var t in soundsEffectsAudio)
+        for (int i = 0; i < soundsEffectsAudio.Length; ++i)
         {
-            t.volume = _soundsEnabled;
+            soundsEffectsAudio[i].volume = _soundsEnabled;
         }
     }
 
