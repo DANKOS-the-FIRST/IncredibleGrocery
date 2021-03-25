@@ -14,10 +14,10 @@ using Random = System.Random;
 
 public static class ButtonExtension
 {
-    public static void AddEventListener<T> (this Button button, T param, Action<T> OnClick)
+    public static void AddEventListener<T> (this Button button, T param, Action<T> onClick)
     {
         button.onClick.AddListener (delegate() {
-            OnClick (param);
+            onClick (param);
         });
     }
     public static void MakeTranslucent(Image img, bool make)
@@ -62,7 +62,6 @@ public class StorageManager : MonoBehaviour
 
         public Image GetImage() => this.Button.image;
     }
-
     public class Cloud
     {
         protected GameObject _cloudObject;
@@ -77,26 +76,36 @@ public class StorageManager : MonoBehaviour
                 cloudImage.enabled = false;
                 _images.Add(cloudImage);
             }
+            _cloudObject.SetActive(false);
         }
-        public void SetPosition(Vector2 vect)
+        private void SetPosition(Vector2 vect)
         {
             _cloudObject.transform.position = vect;
         }
+        public void Appear(Vector2 vect, AudioSource appearSound)
+        {
+            SetPosition(vect);
+            _cloudObject.SetActive(true);
+            appearSound.Play();
+        }
 
+        public void Disappear(AudioSource disappearSound)
+        {
+            _cloudObject.SetActive(false);
+            disappearSound.Play();
+        }
         ~Cloud()
         {
             Destroy(_cloudObject);
         }
     }
-
     public class EmotionCloud : Cloud
     {
         public EmotionCloud(GameObject obj, GameObject canvas) : base(obj, canvas)
         {
             
         }
-
-        public void  SetEmotion(Image img)
+        public void SetEmotion(Image img)
         {
             _images[1].sprite = img.sprite;
             _images[1].enabled = true;
@@ -123,8 +132,6 @@ public class StorageManager : MonoBehaviour
             }
         }
     }
-
-    
     public class AnswersCloud : ItemsCloud
     {
         protected List<GameObject> _signs = new List<GameObject>();
@@ -155,11 +162,69 @@ public class StorageManager : MonoBehaviour
             return ret;
         }
     }
-    public class ItemsStorage
+    class Buyer
     {
-        
+        [SerializeField]
+        private GameObject _buyerGameObject;
+        [SerializeField]
+        private ItemsCloud _orderCloud;
+        [SerializeField]
+        private EmotionCloud _emotionCloud;
+        public Buyer(GameObject buyerGameObject)
+        {
+            _buyerGameObject = buyerGameObject;
+            _buyerGameObject.SetActive(false);
+        }
+        public void Appear(Vector2 vec)
+        {
+            _buyerGameObject.transform.position = vec;
+            _buyerGameObject.SetActive(true);
+        }
+        public void Disappear()
+        {
+            _buyerGameObject.SetActive(false);
+        }
+        public void WalkTo(Vector2 vec)
+        {
+            //Animation
+            _buyerGameObject.transform.position = vec;
+        }
     }
-    private List<Item> _allItems = new List<Item>();
+    class Cashier
+    {
+        private GameObject _cashierGameObject;
+        private GameObject _cashierTableGameObject;
+        private AnswersCloud _answersCloud;
+        public Cashier(GameObject cashierGameObject, GameObject cashierTableGameObject, AnswersCloud answersCloud)
+        {
+            _cashierGameObject = cashierGameObject;
+            _cashierTableGameObject = cashierTableGameObject;
+            _answersCloud = answersCloud;
+        }
+    }
+    public class InventoryRepository
+    {
+        private List<Item> _allItems = new List<Item>();
+        public int Size { get; private set; }
+        private GameObject _selectionSign;
+        public InventoryRepository(GameObject storageCanvas, GameObject selectionSign, Action<int> itmClicked)
+        {
+            _selectionSign = selectionSign;
+            Size = storageCanvas.transform.childCount - 1;
+            for (int i = 0; i < Size; i++ )
+            {
+                int code = i + 1;
+                _allItems.Add(new Item(storageCanvas.transform.GetChild(code).GetComponent<Button>(), (code)));
+                _allItems[i].Button.AddEventListener(code, itmClicked);
+            }
+        }
+        public Image GetItemImage(int index)
+            => _allItems[index].GetImage();
+        public int SelectItem(GameObject markSign, int itemIndex)
+            => _allItems[itemIndex].Select(markSign);
+        public bool ItemIsSelected(int itemIndex)
+            => _allItems[itemIndex].IsSelected();
+    }
     private int _selecteditems = 0;
     private List<int> _orderList;
     private List<int> _answersList;
@@ -168,56 +233,39 @@ public class StorageManager : MonoBehaviour
     private ItemsCloud _orderCloud;
     private AnswersCloud _answersCloud;
     private EmotionCloud _emotionCloud;
-    private int Cash;
+    private int _cash;
+    private InventoryRepository _storage;
     
-    public Text CashCounterGameObject;
+    public Text cashCounterGameObject;
     public GameObject mainCanvas;
     public GameObject storageCanvas;
     public Button sellButton;
-    public GameObject CloudGameObject;
-    public GameObject MarkSignCorrect;
-    public GameObject MarkSignWrong;
+    public GameObject cloudGameObject;
+    public GameObject markSignCorrect;
+    public GameObject markSignWrong;
     
-    public Image[] Emotions;
+    public Image[] emotions;
     // Emorions :
     // 0 - Good
     // 1 - Bad
     
-    public AudioSource[] Sounds;
+    public AudioSource[] sounds;
     // Sounds :
     // 0 - Money added
     // 1 - Bubble Appeared
     // 2 - Money Disappeared
     void Start()
     {
-        for (int i = 0; i < storageCanvas.transform.childCount - 1; i++ )
-        {
-            int code = i + 1;
-            _allItems.Add(new Item(storageCanvas.transform.GetChild(code).GetComponent<Button>(), (code)));
-            _allItems[i].Button.AddEventListener(code, ItemClicked);
-        }
+        _storage = new InventoryRepository(storageCanvas, markSignCorrect, ItemClicked);
         
-        // for (int i = 0; i < 3; i++)
-        // {
-        //     Image cloudImage1 = OrderCloudGameObject.transform.GetChild(i).GetComponent<Image>();
-        //     Image cloudImage2 = AnswersCloudGameObject.transform.GetChild(i).GetComponent<Image>();
-        //     cloudImage1.enabled = false;
-        //     cloudImage2.enabled = false;
-        // }
-        CashCounterGameObject.text = (PlayerPrefs.HasKey("MoneyCash") ? PlayerPrefs.GetInt("MoneyCash") : 0) + " $";
+        cashCounterGameObject.text = (PlayerPrefs.HasKey("MoneyCash") ? PlayerPrefs.GetInt("MoneyCash") : 0) + " $";
         
-        _orderCloud = new ItemsCloud(CloudGameObject, mainCanvas);
-        Sounds[1].Play();
-        _orderCloud.SetPosition( new Vector2(100, 100));
+        _orderCloud = new ItemsCloud(cloudGameObject, mainCanvas);
+        _orderCloud.Appear( new Vector2(100, 100), sounds[1]);
         
-        _answersCloud = new AnswersCloud(CloudGameObject, mainCanvas);
-        Sounds[1].Play();
-        _answersCloud.SetPosition( new Vector2(300, 100));
-        
-        _emotionCloud = new EmotionCloud(CloudGameObject, mainCanvas);
-        Sounds[1].Play();
-        _answersCloud.SetPosition( new Vector2(200, 200));
-        
+        _answersCloud = new AnswersCloud(cloudGameObject, mainCanvas);
+        _emotionCloud = new EmotionCloud(cloudGameObject, mainCanvas);
+
         ButtonExtension.MakeTranslucent(sellButton.image, true);
         sellButton.interactable = false;
         NewCustomerOrder();
@@ -228,18 +276,18 @@ public class StorageManager : MonoBehaviour
         _currentOrderSize = new Random().Next(1, 4);
         _orderList = new List<int>();
         _answersList = new List<int>();
-        Debug.Log("Order size = " + _currentOrderSize);
-        Debug.Log("Numbers of order items:");
+        //Debug.Log("Order size = " + _currentOrderSize);
+        //Debug.Log("Numbers of order items:");
         Random rand = new Random();
         int newNumber = 0;
         for (int i = 0; i < _currentOrderSize; i++)
         {
             do
             {
-                newNumber = rand.Next(1, _allItems.Count + 1);
+                newNumber = rand.Next(1, _storage.Size);
             } while (_orderList.Exists(x => x == newNumber));
             _orderList.Add(newNumber);
-            Debug.Log("Item number = " + _orderList[i]);
+            //Debug.Log("Item number = " + _orderList[i]);
         }
 
         FillCloudWithItems(_orderCloud, _orderList);
@@ -249,28 +297,24 @@ public class StorageManager : MonoBehaviour
     {
         for (int i = 0; i < itemsNumbers.Count; i++)
         {
-            // Image cloudImage = cloud.transform.GetChild(i).GetComponent<Image>();
-            // cloudImage.sprite = _allItems[itemsNumbers[i] - 1].GetImage().sprite;
-            cloud.AddItemToCloud(_allItems[itemsNumbers[i] - 1].GetImage(), itemsNumbers[i]);
-            //cloudImage.enabled = true;
+            cloud.AddItemToCloud(_storage.GetItemImage(itemsNumbers[i] - 1), itemsNumbers[i]);
         }
     }
 
     public void SellClicked()
     {
+        _orderCloud.Disappear(sounds[2]);
         FillCloudWithItems(_answersCloud, _answersList);
-        int correctAns = _answersCloud.CheckCorrectAnswers(_orderList, MarkSignCorrect, MarkSignWrong);
+        _answersCloud.Appear( new Vector2(300, 100), sounds[1]);
+        int correctAns = _answersCloud.CheckCorrectAnswers(_orderList, markSignCorrect, markSignWrong);
         Debug.Log("correctAns: " + correctAns);
         Debug.Log("orderList.Count: " + _orderList.Count);
         AddMoney(correctAns * (correctAns == _orderList.Count ? 20 : 10));
-        if (correctAns == _orderList.Count)
-        {
-            _emotionCloud.SetEmotion(Emotions[0]);
-        }
-        else
-        {
-            _emotionCloud.SetEmotion(Emotions[1]);
-        }
+        
+
+        _emotionCloud.SetEmotion(correctAns == _orderList.Count ? emotions[0] : emotions[1]);
+        _emotionCloud.Appear( new Vector2(200, 200), sounds[1]);
+        
         //AnswersCloudGameObject.transform;
     }
 
@@ -278,11 +322,11 @@ public class StorageManager : MonoBehaviour
     {
         if (sum != 0)
         {
-            Sounds[0].Play();
-            int cash = int.Parse(CashCounterGameObject.text.Split(' ')[0]) + sum;
+            sounds[0].Play();
+            int cash = int.Parse(cashCounterGameObject.text.Split(' ')[0]) + sum;
             Debug.Log("cashStr: " + cash);
             Debug.Log("sum: " + sum);
-            CashCounterGameObject.text = cash + " $";
+            cashCounterGameObject.text = cash + " $";
             PlayerPrefs.SetInt("MoneyCash", cash);
         }
     }
@@ -292,12 +336,12 @@ public class StorageManager : MonoBehaviour
         // Add/delete item number from _answersList after selection/deselction
         if (_selecteditems < _currentOrderSize)
         {
-           _selecteditems += _allItems[itemNumber - 1].Select(MarkSignCorrect); 
+            _selecteditems += _storage.SelectItem(markSignCorrect, itemNumber - 1);
            _answersList.Add(itemNumber);
         }
-        else if (_allItems[itemNumber - 1].IsSelected())
+        else if (_storage.ItemIsSelected(itemNumber - 1))
         {
-            _selecteditems += _allItems[itemNumber - 1].Select(MarkSignCorrect);
+            _selecteditems += _storage.SelectItem(markSignCorrect, itemNumber - 1);
             _answersList.Remove(itemNumber);
         }
         
@@ -312,20 +356,5 @@ public class StorageManager : MonoBehaviour
             ButtonExtension.MakeTranslucent(sellButton.image, true);
             sellButton.interactable = false;
         }
-    }
-
-    private void HideCloud(GameObject cloud)
-    {
-        // There we need to disable visibility of all items in cloud
-        for (int i = 0; i < 3; i++)
-        {
-            Image cloudImage = cloud.transform.GetChild(i).GetComponent<Image>();
-            cloudImage.enabled = false;
-        }
-    }
-    // Update is called once per frame
-    void Update()
-    {
-        
     }
 }
