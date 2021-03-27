@@ -16,13 +16,18 @@ public static class Utils
             onClick (param);
         });
     }
+    public static void MakeTranslucent(SpriteRenderer sprite, bool make)
+    {
+        var tempColor = sprite.color;
+        tempColor.a = make ? 0.5f : 1f;
+        sprite.color = tempColor;
+    }
     public static void MakeTranslucent(Image img, bool make)
     {
         var tempColor = img.color;
         tempColor.a = make ? 0.5f : 1f;
         img.color = tempColor;
     }
-
     public static IEnumerator MoveToTarget(Transform obj, Vector3 target, float duration)
     {
         Vector3 startPosition = obj.position;
@@ -46,25 +51,25 @@ interface IVisible
 
 }
 
-public class VisibleObject : IVisible
-{
-    public GameObject GameObject;
-
-    public IEnumerator AppearAt(float x, float y)
-    {
-        this.GameObject.transform.position = new Vector2(x, y);
-        this.GameObject.SetActive(true);
-        yield return null;
-    }
-
-    public IEnumerator Disappear()
-    {
-        this.GameObject.SetActive(false);
-        yield return null;
-    }
-    public Vector2 position { get;}
-    
-}
+// public class VisibleObject : IVisible
+// {
+//     public GameObject GameObject;
+//
+//     public IEnumerator AppearAt(float x, float y)
+//     {
+//         this.GameObject.transform.position = new Vector2(x, y);
+//         this.GameObject.SetActive(true);
+//         yield return null;
+//     }
+//
+//     public IEnumerator Disappear()
+//     {
+//         this.GameObject.SetActive(false);
+//         yield return null;
+//     }
+//     public Vector2 position { get;}
+//     
+// }
 public class GameManager : MonoBehaviour
 {
     public class Item
@@ -86,9 +91,8 @@ public class GameManager : MonoBehaviour
         Utils.MakeTranslucent(Button.image, _isSelected);
         if (_markSign == null)
         {
-            _markSign = Instantiate(marksign, this.Button.transform, true);
-            _markSign.transform.position = this.Button.transform.position;
-            _markSign.GetComponent<Image>().enabled = true;
+            _markSign = Instantiate(marksign, Button.transform.position, Quaternion.identity);
+            _markSign.GetComponent<SpriteRenderer>().enabled = true;
         }
         else
         {
@@ -103,9 +107,9 @@ public class GameManager : MonoBehaviour
     public class Cloud : IVisible
     {
         protected GameObject _cloudObject; 
-        protected List<Image> _images = new List<Image>();
-        private AudioSource _appearSound;
-        private AudioSource _disappearSound;
+        protected List<SpriteRenderer> _sprites = new List<SpriteRenderer>();
+        protected AudioSource _appearSound;
+        protected AudioSource _disappearSound;
 
         public Vector2 position => _cloudObject.transform.position;
 
@@ -113,22 +117,18 @@ public class GameManager : MonoBehaviour
         {
             _appearSound = appearSound;
             _disappearSound = disappearSound;
-            _cloudObject = Instantiate(cloudObject, canvas.transform, true);
+            _cloudObject = Instantiate(cloudObject, cloudObject.transform.position, Quaternion.identity);
             for (int i = 0; i < 3; i++)
             {
-                Image cloudImage = _cloudObject.transform.GetChild(i).GetComponent<Image>();
-                cloudImage.enabled = false;
-                _images.Add(cloudImage);
+                SpriteRenderer cloudSprite = _cloudObject.transform.GetChild(i).GetComponent<SpriteRenderer>();
+                cloudSprite.enabled = false;
+                _sprites.Add(cloudSprite);
             }
             _cloudObject.SetActive(false);
         }
-        private void SetPosition(Vector2 vect)
-        {
-            _cloudObject.transform.position = vect;
-        }
         public IEnumerator AppearAt(float x, float y)
         {
-            SetPosition(new Vector2(x, y));
+            _cloudObject.transform.position = new Vector3(x, y, 0);
             _cloudObject.SetActive(true);
             _appearSound.Play();
             yield return null;
@@ -162,8 +162,8 @@ public class GameManager : MonoBehaviour
             else
             {
                 _codes.Add(code);
-                _images[_codes.Count - 1].sprite = img.sprite;
-                _images[_codes.Count - 1].enabled = true;
+                _sprites[_codes.Count - 1].sprite = img.sprite;
+                _sprites[_codes.Count - 1].enabled = true;
             }
         }
 
@@ -195,21 +195,30 @@ public class GameManager : MonoBehaviour
             for (int i = 0; i < _codes.Count; i++)
             {
                 yield return new WaitForSeconds(0.5f);
-                Utils.MakeTranslucent(_images[i], true);
+                Utils.MakeTranslucent(_sprites[i], true);
                 if (correctAnswers.Exists(x => x == _codes[i]))
                 {
-                    _signs.Add(Instantiate(_markSignCorrect));
+                    _signs.Add(Instantiate(_markSignCorrect, _sprites[i].transform.position, Quaternion.identity));
                     ret++;
                 }
                 else
-                    _signs.Add(Instantiate(_markSignWrong));
+                    _signs.Add(Instantiate(_markSignWrong, _sprites[i].transform.position, Quaternion.identity));
     
                 int lastIndex = _signs.Count - 1;
-                _signs[lastIndex].transform.SetParent(this._images[i].transform);
-                _signs[lastIndex].transform.position = this._images[i].transform.position;
-                _signs[lastIndex].GetComponent<Image>().enabled = true;
+                _signs[lastIndex].transform.SetParent(this._sprites[i].transform);
+                _signs[lastIndex].transform.position = this._sprites[i].transform.position;
+                _signs[lastIndex].GetComponent<SpriteRenderer>().enabled = true;
             }
             numberOfCorrectAnswers = ret;
+            yield return null;
+        }
+        public IEnumerator Disappear()
+        {
+            _cloudObject.SetActive(false);
+            foreach (var sign in _signs)
+                Destroy(sign);
+            _signs = new List<GameObject>();
+            _disappearSound.Play();
             yield return null;
         }
     }
@@ -220,11 +229,12 @@ public class GameManager : MonoBehaviour
         {
         
         }
-        public void SetEmotion(Image img)
+        public void SetEmotion(SpriteRenderer sprite)
         {
-            _images[1].sprite = img.sprite;
-            _images[1].enabled = true;
+            _sprites[1].sprite = sprite.sprite;
+            _sprites[1].enabled = true;
         }
+        
     }
     private class Cashier
     {
@@ -234,16 +244,16 @@ public class GameManager : MonoBehaviour
         
         public Cashier(GameObject cashierPrefab, GameObject cashierTablePrefab, GameObject canvas)
         {
-            _cashierTableGameObject = Instantiate(cashierTablePrefab, canvas.transform, true);
-            _cashierGameObject = Instantiate(cashierPrefab, canvas.transform, true);
+            _cashierTableGameObject = Instantiate(cashierTablePrefab, cashierTablePrefab.transform.position, Quaternion.identity);
+            _cashierGameObject = Instantiate(cashierPrefab, cashierPrefab.transform.position, Quaternion.identity);
         }
 
         public void AppearAt(float x, float y)
         {
-            _cashierTableGameObject.transform.position = new Vector2(x, y - 40);
+            _cashierTableGameObject.transform.position = new Vector3(x - 20, y - 20, 0);
             _cashierTableGameObject.SetActive(true);
-            
-            _cashierGameObject.transform.position = new Vector2(x,y);
+
+            _cashierGameObject.transform.position = new Vector3(x, y, 0);
             _cashierGameObject.SetActive(true);
         }
     }
@@ -254,13 +264,12 @@ public class GameManager : MonoBehaviour
         public int storageSize;
         public Buyer(GameObject buyerPrefab, GameObject canvas)
         {
-
-            _buyerGameObject = Instantiate(buyerPrefab, canvas.transform, true);
+            _buyerGameObject = Instantiate(buyerPrefab, buyerPrefab.transform.position, Quaternion.identity);
             _buyerGameObject.SetActive(false);
         }
         public IEnumerator AppearAt(float x, float y)
         {
-            _buyerGameObject.transform.position = new Vector2(x, y);
+            _buyerGameObject.transform.position = new Vector3(x, y, 0);
             _buyerGameObject.SetActive(true);
             yield return null;
         }
@@ -284,7 +293,6 @@ public class GameManager : MonoBehaviour
         }
         public List<int> NewBuyerOrder()
         {
-            Debug.Log("Start to creating new buyers order");
             int orderSize = new Random().Next(1, 4);
             _myOrderList = new List<int>();
             Random rand = new Random();
@@ -315,7 +323,6 @@ public class GameManager : MonoBehaviour
         //, Action<int> itmClicked
         public void SelectItem(int itemIndex)
         {
-            Debug.Log("ClickedOn item code : " + (itemIndex + 1));
             if (_selectedItems.Count < _orderSize)
             {
                 if (_allItems[itemIndex].Select(_markSign) == 1)
@@ -343,7 +350,6 @@ public class GameManager : MonoBehaviour
             Size = _itemsBox.transform.childCount - 1;
             for (int i = 0; i < Size; i++)
             {
-                Debug.Log("i = " + i);
                 int code = i + 1;
                 _allItems.Add(new Item(_itemsBox.transform.GetChild(code).GetComponent<Button>(), (code)));
                 _allItems[i].Button.AddEventListener(code - 1, SelectItem);
@@ -364,14 +370,22 @@ public class GameManager : MonoBehaviour
                 ret.Add(GetItemImage(code-1));
             return ret;
         }
-        
+
 
         private void SellButtonClicked(int a) => SellClicked = true;
 
         public List<int> GETSelectedItems()
         {
             if (SellClicked)
+            {
+                // deselect every selected item
+                foreach (int itm in _selectedItems)
+                {
+                    _allItems[itm - 1].Select(_markSign);
+                }
                 return _selectedItems;
+            }
+                
             else
                 throw new ArgumentException("There are no selected items!");
         }
@@ -386,14 +400,14 @@ public class GameManager : MonoBehaviour
 
         public IEnumerator AppearAt(float x, float y)
         {
-            _storageWrap.transform.position = new Vector3(x, y);
+            _storageWrap.transform.position = new Vector3(x, y, 0);
             _storageWrap.SetActive(true);
             SellClicked = false;
             yield return null;
         }
         public IEnumerator MoveTo(Vector3 vec)
         {
-            return Utils.MoveToTarget(_storageWrap.transform, vec, 3);
+            return Utils.MoveToTarget(_storageWrap.transform, vec, 1);
         }
         public IEnumerator Disappear()
         {
@@ -413,16 +427,16 @@ public class GameManager : MonoBehaviour
     private Buyer _buyer;
     
     // Positions : 
-    private Vector3 cashierPos;
-    private Vector3 InventoryInPos;
-    private Vector3 InventoryOutPos;
-    private Vector3 DoorPos;
-    private Vector3 NearCashierPos;
-    private float _screenHeight;
-    private float _screenWidth;
+    private Vector3 _cashierPos;
+    private Vector3 _inventoryInPos;
+    private Vector3 _inventoryOutPos;
+    private Vector3 _doorPos;
+    private Vector3 _nearCashierPos;
+    private Vector3 _answersAppearPos;
+    private Vector3 _orderAppearPos;
 
-    
-    
+
+
     public Text cashCounterGameObject;
     public GameObject mainCanvas;
     public GameObject storageCanvas;
@@ -438,7 +452,7 @@ public class GameManager : MonoBehaviour
     // 1 - cashier
     // 2 - cashier table
     
-    public Image[] emotions;
+    public SpriteRenderer[] emotions;
     // Emorions :
     // 0 - Good
     // 1 - Bad
@@ -448,10 +462,10 @@ public class GameManager : MonoBehaviour
     // 0 - Money added
     // 1 - Bubble Appeared
     // 2 - Money Disappeared
-    void Start()
+    private void Start()
     {
         cashCounterGameObject.text = (PlayerPrefs.HasKey("MoneyCash") ? PlayerPrefs.GetInt("MoneyCash") : 0) + " $";
-        
+
         _storage = new InventoryRepository(storageCanvas, markSignCorrect);
         _buyer = new Buyer(gamePrefabs[0], mainCanvas);
         _cashier = new Cashier(gamePrefabs[1], gamePrefabs[2], mainCanvas);
@@ -462,23 +476,40 @@ public class GameManager : MonoBehaviour
         _buyer.storageSize = _storage.Size;
         
         // Positioning : 
-        cashierPos = new Vector3(450, 250);
-        InventoryInPos = new Vector3(540, 213);
-        InventoryOutPos = new Vector3(798, 213);
-        DoorPos = new Vector3(100, 300);
-        NearCashierPos = new Vector3(380, 250);
         
-        _cashier.AppearAt(cashierPos.x, cashierPos.y);
+        // position where cashier stays
+        _cashierPos = new Vector2(10, 370);
+        
+        // position where buyer stays to order smth
+        _nearCashierPos = new Vector2(_cashierPos.x - 45, _cashierPos.y + 5);
+        
+        // position of Storage when we user see storage
+        _inventoryInPos = new Vector2(storageCanvas.transform.position.x, storageCanvas.transform.position.y);
+        
+        // position of Storage when we user see storage
+        _inventoryOutPos = new Vector2(200, _inventoryInPos.y);
+        
+        // position of buyer when he arrives to the shop (appears)
+        _doorPos = new Vector2(-140, 450);
+        
+        // cashier answers cloud appearing position
+        _orderAppearPos = new Vector2(4, 420);
+        
+        // buyer order cloud appearing position
+        _answersAppearPos = new Vector2(45, 420);
+        
+        _cashier.AppearAt(_cashierPos.x, _cashierPos.y);
+        
         StartCoroutine(NewBuyerArrived());
     }
 
     public IEnumerator NewBuyerArrived()
     {
         yield return StartCoroutine(
-            _buyer.AppearAt(DoorPos.x, DoorPos.y));
+            _buyer.AppearAt(_doorPos.x, _doorPos.y));
         
         yield return StartCoroutine(
-            _buyer.WalkTo(NearCashierPos));
+            _buyer.WalkTo(_nearCashierPos));
         
         List<int> orderList = _buyer.NewBuyerOrder();
         List<Image> OrderItemsImages = _storage.GetItemsImages(orderList);
@@ -488,15 +519,15 @@ public class GameManager : MonoBehaviour
             .ToDictionary(x => x, x => OrderItemsImages[orderList.IndexOf(x)]));
         
         yield return StartCoroutine(
-            _orderCloud.AppearAt(_buyer.position.x, _buyer.position.y));
+            _orderCloud.AppearAt(_orderAppearPos.x, _orderAppearPos.y));
         
         yield return new WaitForSeconds(5);
         
         yield return StartCoroutine(
-            _storage.AppearAt(InventoryOutPos.x ,InventoryOutPos.y));
-        
+            _storage.AppearAt(_inventoryOutPos.x ,_inventoryOutPos.y));
+
         yield return StartCoroutine(
-            _storage.MoveTo(InventoryInPos));
+            _storage.MoveTo(_inventoryInPos));
         
         yield return StartCoroutine(
             _orderCloud.Disappear());
@@ -504,20 +535,21 @@ public class GameManager : MonoBehaviour
         yield return new WaitUntil(
             () => _storage.SellClicked);
         
+        List<int> selectedItems = _storage.GETSelectedItems();
+        
         yield return StartCoroutine(
-            _storage.MoveTo(InventoryOutPos));
+            _storage.MoveTo(_inventoryOutPos));
         
         yield return StartCoroutine(
             _storage.Disappear());
         
-        List<int> selectedItems = _storage.GETSelectedItems();
         List<Image> ItemsImages = _storage.GetItemsImages(selectedItems);
         
         _answersCloud.AddItemsToCloud(selectedItems
             .ToDictionary(x => x, x => ItemsImages[selectedItems.IndexOf(x)]));
         
         yield return StartCoroutine(
-            _answersCloud.AppearAt(cashierPos.x, cashierPos.y));
+            _answersCloud.AppearAt(_answersAppearPos.x, _answersAppearPos.y));
         
         yield return StartCoroutine(
             _answersCloud.CheckCorrectAnswers(orderList));
@@ -529,25 +561,26 @@ public class GameManager : MonoBehaviour
         
         yield return new WaitForSeconds(1);
         
-        yield return StartCoroutine(
-            _answersCloud.Disappear());
-        
         _emotionCloud.SetEmotion(_answersCloud.numberOfCorrectAnswers == orderList.Count ? emotions[0] : emotions[1]);
         
         yield return StartCoroutine(
-            _emotionCloud.AppearAt(_buyer.position.x, _buyer.position.y));
+            _answersCloud.Disappear());
+        
+        yield return StartCoroutine(
+            _emotionCloud.AppearAt(_orderAppearPos.x, _orderAppearPos.y));
+        
+        yield return new WaitForSeconds(2);
 
         yield return StartCoroutine(_buyer.Turn());
-        
+
         yield return StartCoroutine(_emotionCloud.Disappear());
         
-        yield return StartCoroutine(_buyer.WalkTo(DoorPos));
+        yield return StartCoroutine(_buyer.WalkTo(_doorPos));
         
         yield return StartCoroutine(_buyer.Disappear());
-        
 
-        
         yield return StartCoroutine(_buyer.Turn());
+        
     }
     public void AddMoney(int sum)
     {
