@@ -94,6 +94,8 @@ public class AudioManager : MonoBehaviour
             musicButton.GetComponent<Button>().image.sprite = redImage;
             musicButton.transform.GetChild(0).GetComponent<Text>().text = Constants.OFF;
         }
+
+        UpdateAudio();
     }
 
     private void UpdateSoundsButtonIcon()
@@ -108,5 +110,7 @@ public class AudioManager : MonoBehaviour
             soundsButton.GetComponent<Button>().image.sprite = redImage;
             soundsButton.transform.GetChild(0).GetComponent<Text>().text = Constants.OFF;
         }
+
+        UpdateAudio();
     }
 }

@@ -154,8 +154,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   soundsButton: {fileID: 307752503}
   musicButton: {fileID: 754453902}
-  GreenImage: {fileID: 21300000, guid: b6fd559886aac5841bb69595a04dbcea, type: 3}
-  RedImage: {fileID: 21300000, guid: 974ad89723aae954e8dd3cccc6c4c385, type: 3}
+  greenImage: {fileID: 21300000, guid: 65ff805c57e45514dbe513eab0caedb0, type: 3}
+  redImage: {fileID: 21300000, guid: d3c27135fe7edf64f95514f35852c391, type: 3}
   soundsEffectsAudio:
   - {fileID: 487605050}
   - {fileID: 1805075190}
@@ -5356,7 +5356,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cashCounterGameObject: {fileID: 1873591257}
-  mainCanvas: {fileID: 2044612209}
   storageCanvas: {fileID: 1939236688}
   cloudGameObject: {fileID: 2304847244127690576, guid: 661c3466fb9a1024eac1e50a56d1e0d3, type: 3}
   markSignCorrect: {fileID: 2911107497149523832, guid: 0f72fcbc26fc0f341afb9fc7f7eef052, type: 3}
