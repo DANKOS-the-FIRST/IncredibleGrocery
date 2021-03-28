@@ -453,7 +453,6 @@ public class GameManager : MonoBehaviour
     private ItemsCloud _orderCloud;
     private AnswersCloud _answersCloud;
     private EmotionCloud _emotionCloud;
-    private int _cash;
     private InventoryRepository _storage;
     private Cashier _cashier;
     private Buyer _buyer;
@@ -498,7 +497,7 @@ public class GameManager : MonoBehaviour
     // 2 - Money Disappeared
     private void Start()
     {
-        cashCounterGameObject.text = (PlayerPrefs.HasKey("MoneyCash") ? "$ " + PlayerPrefs.GetInt("MoneyCash") : ""); 
+        cashCounterGameObject.text = ("$ " + (PlayerPrefs.HasKey("MoneyCash") ? PlayerPrefs.GetInt("MoneyCash") : 0));
         
         _storage = new InventoryRepository(storageCanvas, markSignCorrect);
         _buyer = new Buyer(gamePrefabs[0], mainCanvas);
