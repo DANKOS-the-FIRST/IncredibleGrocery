@@ -8,34 +8,34 @@ using UnityEngine;
 using UnityEngine.UI;
 using Random = System.Random;
 
-public interface IVisibleSceneObject
+public interface IAppearable
 {
     public IEnumerator AppearAt(float x, float y);
+}
+
+public interface IDisappearable
+{
     public IEnumerator Disappear();
-    public Vector2 Position { get; }
 }
 
 public class GameManager : MonoBehaviour
 {
-    public class Item
+    private class Item
     {
-        private bool _isSelected = false;
-        public Button Button;
-        public int Code;
-        private GameObject _markSign = null;
-        
-        public Item(Button btn, int cd)
+        private GameObject _markSign;
+
+        public Button Button { get; }
+        public bool IsSelected { get; private set; }
+
+        public Item(Button btn)
         {
             Button = btn;
-            Code = cd;
         }
 
-        public bool IsSelected() => _isSelected;
-
-        public int Select(GameObject marksign)
+        public int Select(GameObject markSign)
         {
-            _isSelected = !_isSelected;
-            if (_isSelected)
+            IsSelected = !IsSelected;
+            if (IsSelected)
             {
                 Button.image.MakeTranslucent();
             }
@@ -44,10 +44,9 @@ public class GameManager : MonoBehaviour
                 Button.image.MakeOpaque();
             }
 
-            //Utils.MakeTranslucent(Button.image, _isSelected);
             if (_markSign is null)
             {
-                _markSign = Instantiate(marksign, Button.transform.position, Quaternion.identity);
+                _markSign = Instantiate(markSign, Button.transform.position, Quaternion.identity);
                 _markSign.GetComponent<SpriteRenderer>().enabled = true;
             }
             else
@@ -56,85 +55,81 @@ public class GameManager : MonoBehaviour
                 _markSign = null;
             }
 
-            return _isSelected ? 1 : -1;
+            return IsSelected ? 1 : -1;
         }
 
-        public Image GetImage() => this.Button.image;
+        public Image GetImage() => Button.image;
     }
 
-    public class Cloud : IVisibleSceneObject
+    private class Cloud : IAppearable, IDisappearable
     {
-        protected GameObject _cloudObject;
-        protected List<SpriteRenderer> _sprites = new List<SpriteRenderer>();
-        protected AudioSource _appearSound;
-        protected AudioSource _disappearSound;
+        private readonly AudioSource _appearSound;
+        protected readonly GameObject CloudObject;
+        protected readonly List<SpriteRenderer> Sprites = new List<SpriteRenderer>();
+        protected readonly AudioSource DisappearSound;
 
-        public Vector2 Position => _cloudObject.transform.position;
-
-        public Cloud(GameObject cloudObject, GameObject canvas, AudioSource appearSound, AudioSource disappearSound)
+        protected Cloud(GameObject cloudObject, AudioSource appearSound, AudioSource disappearSound)
         {
             _appearSound = appearSound;
-            _disappearSound = disappearSound;
-            _cloudObject = Instantiate(cloudObject, cloudObject.transform.position, Quaternion.identity);
+            DisappearSound = disappearSound;
+            CloudObject = Instantiate(cloudObject, cloudObject.transform.position, Quaternion.identity);
             for (int i = 0; i < 3; i++)
             {
-                SpriteRenderer cloudSprite = _cloudObject.transform.GetChild(i).GetComponent<SpriteRenderer>();
+                SpriteRenderer cloudSprite = CloudObject.transform.GetChild(i).GetComponent<SpriteRenderer>();
                 cloudSprite.enabled = false;
-                _sprites.Add(cloudSprite);
+                Sprites.Add(cloudSprite);
             }
 
-            _cloudObject.SetActive(false);
+            CloudObject.SetActive(false);
         }
 
         public IEnumerator AppearAt(float x, float y)
         {
-            _cloudObject.transform.position = new Vector3(x, y, 0);
-            _cloudObject.SetActive(true);
+            CloudObject.transform.position = new Vector3(x, y, 0);
+            CloudObject.SetActive(true);
             _appearSound.Play();
             yield return null;
         }
 
         public IEnumerator Disappear()
         {
-            _cloudObject.SetActive(false);
-            _disappearSound.Play();
+            CloudObject.SetActive(false);
+            DisappearSound.Play();
             yield return null;
         }
 
         ~Cloud()
         {
-            Destroy(_cloudObject);
+            Destroy(CloudObject);
         }
     }
 
-    public class ItemsCloud : Cloud
+    private class ItemsCloud : Cloud
     {
-        protected List<int> _codes = new List<int>();
+        protected readonly List<int> Codes = new List<int>();
 
-        public ItemsCloud(GameObject obj, GameObject canvas, AudioSource appearSound, AudioSource disappearSound)
-            : base(obj, canvas, appearSound, disappearSound)
+        public ItemsCloud(GameObject obj, AudioSource appearSound, AudioSource disappearSound)
+            : base(obj, appearSound, disappearSound)
         {
         }
 
         public void ClearValues()
         {
-            for (int i = 0; i < _sprites.Count; i++)
-            {
-                _sprites[i].enabled = false;
-            }
-            _codes.Clear();
+            Sprites.ForEach(t => t.enabled = false);
+            Codes.Clear();
         }
-        public void AddItemToCloud(Image img, int code)
+
+        private void AddItemToCloud(Image img, int code)
         {
-            if (_codes.Exists(x => x == code))
+            if (Codes.Exists(x => x == code))
             {
-                _codes.Remove(code);
+                Codes.Remove(code);
             }
             else
             {
-                _codes.Add(code);
-                _sprites[_codes.Count - 1].sprite = img.sprite;
-                _sprites[_codes.Count - 1].enabled = true;
+                Codes.Add(code);
+                Sprites[Codes.Count - 1].sprite = img.sprite;
+                Sprites[Codes.Count - 1].enabled = true;
             }
         }
 
@@ -147,16 +142,16 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public class AnswersCloud : ItemsCloud
+    private class AnswersCloud : ItemsCloud
     {
-        protected List<GameObject> _signs = new List<GameObject>();
-        private GameObject _markSignCorrect;
-        private GameObject _markSignWrong;
-        public int numberOfCorrectAnswers { get; private set; }
+        private readonly List<GameObject> _signs = new List<GameObject>();
+        private readonly GameObject _markSignCorrect;
+        private readonly GameObject _markSignWrong;
+        public int NumberOfCorrectAnswers { get; private set; }
 
-        public AnswersCloud(GameObject obj, GameObject canvas, AudioSource appearSound, AudioSource disappearSound,
+        public AnswersCloud(GameObject obj, AudioSource appearSound, AudioSource disappearSound,
             GameObject markSignCorrect, GameObject markSignWrong)
-            : base(obj, canvas, appearSound, disappearSound)
+            : base(obj, appearSound, disappearSound)
         {
             _markSignCorrect = markSignCorrect;
             _markSignWrong = markSignWrong;
@@ -166,95 +161,97 @@ public class GameManager : MonoBehaviour
         {
             int ret = 0;
             yield return new WaitForSeconds(0.5f);
-            for (int i = 0; i < _codes.Count; i++)
+            for (int i = 0; i < Codes.Count; i++)
             {
                 yield return new WaitForSeconds(0.5f);
-                _sprites[i].MakeTranslucent();
-                if (correctAnswers.Exists(x => x == _codes[i]))
+                Sprites[i].MakeTranslucent();
+                if (correctAnswers.Exists(x => x == Codes[i]))
                 {
-                    _signs.Add(Instantiate(_markSignCorrect, _sprites[i].transform.position, Quaternion.identity));
+                    _signs.Add(Instantiate(_markSignCorrect, Sprites[i].transform.position, Quaternion.identity));
                     ret++;
                 }
                 else
-                    _signs.Add(Instantiate(_markSignWrong, _sprites[i].transform.position, Quaternion.identity));
+                    _signs.Add(Instantiate(_markSignWrong, Sprites[i].transform.position, Quaternion.identity));
 
                 int lastIndex = _signs.Count - 1;
-                _signs[lastIndex].transform.SetParent(this._sprites[i].transform);
-                _signs[lastIndex].transform.position = this._sprites[i].transform.position;
+                _signs[lastIndex].transform.SetParent(this.Sprites[i].transform);
+                _signs[lastIndex].transform.position = this.Sprites[i].transform.position;
                 _signs[lastIndex].GetComponent<SpriteRenderer>().enabled = true;
             }
 
-            numberOfCorrectAnswers = ret;
+            NumberOfCorrectAnswers = ret;
             yield return null;
         }
 
-        public IEnumerator Disappear()
+        public new IEnumerator Disappear()
         {
-            _cloudObject.SetActive(false);
+            CloudObject.SetActive(false);
             foreach (var sign in _signs)
                 Destroy(sign);
 
-            _disappearSound.Play();
+            DisappearSound.Play();
 
             yield return null;
         }
-        public void ClearValues()
+
+        public new void ClearValues()
         {
             _signs.Clear();
-            _codes.Clear();
-            numberOfCorrectAnswers = 0;
-            for (int i = 0; i < _sprites.Count; i++)
+            Codes.Clear();
+            NumberOfCorrectAnswers = 0;
+            for (int i = 0; i < Sprites.Count; i++)
             {
-                _sprites[i].MakeOpaque();
-                _sprites[i].enabled = false;
+                Sprites[i].MakeOpaque();
+                Sprites[i].enabled = false;
             }
         }
     }
 
-    public class EmotionCloud : Cloud
+    private class EmotionCloud : Cloud
     {
-        public EmotionCloud(GameObject obj, GameObject canvas, AudioSource appearSound, AudioSource disappearSound)
-            : base(obj, canvas, appearSound, disappearSound)
+        public EmotionCloud(GameObject obj, AudioSource appearSound, AudioSource disappearSound)
+            : base(obj, appearSound, disappearSound)
         {
         }
 
         public void SetEmotion(SpriteRenderer sprite)
         {
-            _sprites[1].sprite = sprite.sprite;
-            _sprites[1].enabled = true;
+            Sprites[1].sprite = sprite.sprite;
+            Sprites[1].enabled = true;
         }
     }
 
-    private class Cashier
+    private class Cashier : IAppearable
     {
-        private GameObject _cashierGameObject;
+        private readonly GameObject _cashierGameObject;
 
-        private GameObject _cashierTableGameObject;
+        private readonly GameObject _cashierTableGameObject;
 
-        public Cashier(GameObject cashierPrefab, GameObject cashierTablePrefab, GameObject canvas)
+        public Cashier(GameObject cashierPrefab, GameObject cashierTablePrefab)
         {
             _cashierTableGameObject = Instantiate(cashierTablePrefab, cashierTablePrefab.transform.position,
                 Quaternion.identity);
             _cashierGameObject = Instantiate(cashierPrefab, cashierPrefab.transform.position, Quaternion.identity);
         }
 
-        public void AppearAt(float x, float y)
+        public IEnumerator AppearAt(float x, float y)
         {
             _cashierTableGameObject.transform.position = new Vector2(x - 20, y - 20);
             _cashierTableGameObject.SetActive(true);
 
             _cashierGameObject.transform.position = new Vector2(x, y);
             _cashierGameObject.SetActive(true);
+            yield return null;
         }
     }
 
-    public class Buyer : IVisibleSceneObject
+    private class Buyer : IAppearable, IDisappearable
     {
-        private GameObject _buyerGameObject;
+        private readonly GameObject _buyerGameObject;
         private List<int> _myOrderList;
-        public int storageSize;
+        public int StorageSize { get; set; }
 
-        public Buyer(GameObject buyerPrefab, GameObject canvas)
+        public Buyer(GameObject buyerPrefab)
         {
             _buyerGameObject = Instantiate(buyerPrefab, buyerPrefab.transform.position, Quaternion.identity);
             _buyerGameObject.SetActive(false);
@@ -278,6 +275,7 @@ public class GameManager : MonoBehaviour
             _buyerGameObject.transform.localRotation = Quaternion.Euler(0, 180, 0);
             yield return null;
         }
+
         public IEnumerator TurnRight()
         {
             _buyerGameObject.transform.localRotation = Quaternion.Euler(0, 0, 0);
@@ -302,7 +300,7 @@ public class GameManager : MonoBehaviour
             {
                 do
                 {
-                    newNumber = rand.Next(1, storageSize + 1);
+                    newNumber = rand.Next(1, StorageSize + 1);
                 } while (_myOrderList.Exists(x => x == newNumber));
 
                 _myOrderList.Add(newNumber);
@@ -317,25 +315,25 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public class InventoryRepository : IVisibleSceneObject
+    private class InventoryRepository : IAppearable, IDisappearable
     {
-        private GameObject _storageWrap;
-        private GameObject _itemsBox;
-        private GameObject _markSign;
-        private Button _sellButton;
-        
-        private List<Item> _allItems = new List<Item>();
-        public int Size;
+        private readonly GameObject _storageWrap;
+        private readonly GameObject _itemsBox;
+        private readonly GameObject _markSign;
+        private readonly Button _sellButton;
 
-        private List<int> _selectedItems;
-        public int _orderSize;
+        private readonly List<Item> _allItems = new List<Item>();
+        private readonly List<int> _selectedItems;
+
+        public int Size { get; }
+        public int OrderSize { get; set; }
 
         public bool SellClicked { get; private set; }
 
         //, Action<int> itmClicked
-        public void SelectItem(int itemIndex)
+        private void SelectItem(int itemIndex)
         {
-            if (_selectedItems.Count < _orderSize)
+            if (_selectedItems.Count < OrderSize)
             {
                 if (_allItems[itemIndex].Select(_markSign) == 1)
                     _selectedItems.Add(itemIndex + 1);
@@ -348,7 +346,7 @@ public class GameManager : MonoBehaviour
                 _selectedItems.Remove(itemIndex + 1);
             }
 
-            ActivateSellButton(_selectedItems.Count == _orderSize);
+            ActivateSellButton(_selectedItems.Count == OrderSize);
         }
 
         public InventoryRepository(GameObject storageWrap, GameObject markSign)
@@ -365,7 +363,7 @@ public class GameManager : MonoBehaviour
             for (int i = 0; i < Size; i++)
             {
                 int code = i + 1;
-                _allItems.Add(new Item(_itemsBox.transform.GetChild(code).GetComponent<Button>(), (code)));
+                _allItems.Add(new Item(_itemsBox.transform.GetChild(code).GetComponent<Button>()));
                 _allItems[i].Button.AddEventListener(code - 1, SelectItem);
             }
 
@@ -374,14 +372,16 @@ public class GameManager : MonoBehaviour
             _sellButton.AddEventListener(Size, SellButtonClicked);
         }
 
-        public Image GetItemImage(int index)
-            => _allItems[index].GetImage();
+        private Image GetItemImage(int index) => _allItems[index].GetImage();
 
         public List<Image> GetItemsImages(List<int> codes)
         {
             List<Image> ret = new List<Image>();
             foreach (var code in codes)
+            {
                 ret.Add(GetItemImage(code - 1));
+            }
+
             return ret;
         }
 
@@ -400,9 +400,10 @@ public class GameManager : MonoBehaviour
 
                 return _selectedItems;
             }
-
             else
+            {
                 throw new ArgumentException("There are no selected items!");
+            }
         }
 
         private void ActivateSellButton(bool want)
@@ -416,12 +417,10 @@ public class GameManager : MonoBehaviour
                 _sellButton.image.MakeTranslucent();
             }
 
-            //Utils.MakeTranslucent(_sellButton.image, !want);
             _sellButton.interactable = want;
         }
 
-        public bool ItemIsSelected(int itemIndex)
-            => _allItems[itemIndex].IsSelected();
+        public bool ItemIsSelected(int itemIndex) => _allItems[itemIndex].IsSelected;
 
         public IEnumerator AppearAt(float x, float y)
         {
@@ -441,13 +440,13 @@ public class GameManager : MonoBehaviour
             _storageWrap.SetActive(false);
             yield return null;
         }
+
         public void ClearValues()
         {
             _selectedItems.Clear();
             SellClicked = false;
-            _orderSize = 0;
+            OrderSize = 0;
         }
-        public Vector2 Position => _storageWrap.transform.position;
     }
 
     private ItemsCloud _orderCloud;
@@ -466,10 +465,7 @@ public class GameManager : MonoBehaviour
     private Vector3 _answersAppearPos;
     private Vector3 _orderAppearPos;
 
-
     public Text cashCounterGameObject;
-    public GameObject mainCanvas;
-
     public GameObject storageCanvas;
 
     //public Button sellButton;
@@ -497,17 +493,18 @@ public class GameManager : MonoBehaviour
     // 2 - Money Disappeared
     private void Start()
     {
-        cashCounterGameObject.text = ("$ " + (PlayerPrefs.HasKey("MoneyCash") ? PlayerPrefs.GetInt("MoneyCash") : 0));
-        
-        _storage = new InventoryRepository(storageCanvas, markSignCorrect);
-        _buyer = new Buyer(gamePrefabs[0], mainCanvas);
-        _cashier = new Cashier(gamePrefabs[1], gamePrefabs[2], mainCanvas);
-        _orderCloud = new ItemsCloud(cloudGameObject, mainCanvas, sounds[1], sounds[2]);
-        _answersCloud = new AnswersCloud(cloudGameObject, mainCanvas, sounds[1], sounds[2],
-            markSignCorrect, markSignWrong);
-        _emotionCloud = new EmotionCloud(cloudGameObject, mainCanvas, sounds[1], sounds[2]);
+        cashCounterGameObject.text =
+            "$ " + (PlayerPrefs.HasKey(Constants.MoneyCash) ? PlayerPrefs.GetInt(Constants.MoneyCash) : 0);
 
-        _buyer.storageSize = _storage.Size;
+        _storage = new InventoryRepository(storageCanvas, markSignCorrect);
+        _buyer = new Buyer(gamePrefabs[0]);
+        _cashier = new Cashier(gamePrefabs[1], gamePrefabs[2]);
+        _orderCloud = new ItemsCloud(cloudGameObject, sounds[1], sounds[2]);
+        _answersCloud = new AnswersCloud(cloudGameObject, sounds[1], sounds[2],
+            markSignCorrect, markSignWrong);
+        _emotionCloud = new EmotionCloud(cloudGameObject, sounds[1], sounds[2]);
+
+        _buyer.StorageSize = _storage.Size;
 
         // Positioning : 
 
@@ -518,7 +515,8 @@ public class GameManager : MonoBehaviour
         _nearCashierPos = new Vector2(_cashierPos.x - 45, _cashierPos.y + 5);
 
         // position of Storage when we user see storage
-        _inventoryInPos = new Vector2(storageCanvas.transform.position.x, storageCanvas.transform.position.y);
+        var storageCanvasPosition = storageCanvas.transform.position;
+        _inventoryInPos = new Vector2(storageCanvasPosition.x, storageCanvasPosition.y);
 
         // position of Storage when we user see storage
         _inventoryOutPos = new Vector2(200, _inventoryInPos.y);
@@ -532,12 +530,12 @@ public class GameManager : MonoBehaviour
         // buyer order cloud appearing position
         _answersAppearPos = new Vector2(45, 420);
 
-        _cashier.AppearAt(_cashierPos.x, _cashierPos.y);
+        StartCoroutine(_cashier.AppearAt(_cashierPos.x, _cashierPos.y));
 
         StartCoroutine(NewBuyerArrived());
     }
 
-    public IEnumerator NewBuyerArrived()
+    private IEnumerator NewBuyerArrived()
     {
         yield return StartCoroutine(
             _buyer.AppearAt(_doorPos.x, _doorPos.y));
@@ -546,11 +544,11 @@ public class GameManager : MonoBehaviour
             _buyer.WalkTo(_nearCashierPos));
 
         List<int> orderList = _buyer.NewBuyerOrder();
-        List<Image> OrderItemsImages = _storage.GetItemsImages(orderList);
+        List<Image> orderItemsImages = _storage.GetItemsImages(orderList);
 
-        _storage._orderSize = orderList.Count;
+        _storage.OrderSize = orderList.Count;
         _orderCloud.AddItemsToCloud(orderList
-            .ToDictionary(x => x, x => OrderItemsImages[orderList.IndexOf(x)]));
+            .ToDictionary(x => x, x => orderItemsImages[orderList.IndexOf(x)]));
 
         yield return StartCoroutine(
             _orderCloud.AppearAt(_orderAppearPos.x, _orderAppearPos.y));
@@ -577,10 +575,10 @@ public class GameManager : MonoBehaviour
         yield return StartCoroutine(
             _storage.Disappear());
 
-        List<Image> ItemsImages = _storage.GetItemsImages(selectedItems);
+        List<Image> itemsImages = _storage.GetItemsImages(selectedItems);
 
         _answersCloud.AddItemsToCloud(selectedItems
-            .ToDictionary(x => x, x => ItemsImages[selectedItems.IndexOf(x)]));
+            .ToDictionary(x => x, x => itemsImages[selectedItems.IndexOf(x)]));
 
         yield return StartCoroutine(
             _answersCloud.AppearAt(_answersAppearPos.x, _answersAppearPos.y));
@@ -588,13 +586,13 @@ public class GameManager : MonoBehaviour
         yield return StartCoroutine(
             _answersCloud.CheckCorrectAnswers(orderList));
 
-        AddMoney(_answersCloud.numberOfCorrectAnswers *
-                 (_answersCloud.numberOfCorrectAnswers == orderList.Count ? 20 : 10));
+        AddMoney(_answersCloud.NumberOfCorrectAnswers *
+                 (_answersCloud.NumberOfCorrectAnswers == orderList.Count ? 20 : 10));
 
 
         yield return new WaitForSeconds(1);
 
-        _emotionCloud.SetEmotion(_answersCloud.numberOfCorrectAnswers == orderList.Count ? emotions[0] : emotions[1]);
+        _emotionCloud.SetEmotion(_answersCloud.NumberOfCorrectAnswers == orderList.Count ? emotions[0] : emotions[1]);
 
         yield return StartCoroutine(
             _answersCloud.Disappear());
@@ -610,16 +608,18 @@ public class GameManager : MonoBehaviour
 
         yield return StartCoroutine(_buyer.WalkTo(_doorPos));
 
+        yield return new WaitForSeconds(0.3f);
+
         yield return StartCoroutine(_buyer.Disappear());
 
         yield return StartCoroutine(_buyer.TurnRight());
-        
+
         yield return new WaitForSeconds(1);
-        
+
         NextBuyer();
     }
-    
-    public void NextBuyer()
+
+    private void NextBuyer()
     {
         _buyer.ClearValues();
         _storage.ClearValues();
@@ -627,14 +627,15 @@ public class GameManager : MonoBehaviour
         _orderCloud.ClearValues();
         StartCoroutine(NewBuyerArrived());
     }
-    public void AddMoney(int sum)
+
+    private void AddMoney(int sum)
     {
         if (sum != 0)
         {
             sounds[0].Play();
             int cash = int.Parse(cashCounterGameObject.text.Split(' ')[1]) + sum;
             cashCounterGameObject.text = "$ " + cash;
-            PlayerPrefs.SetInt("MoneyCash", cash);
+            PlayerPrefs.SetInt(Constants.MoneyCash, cash);
         }
     }
 }
