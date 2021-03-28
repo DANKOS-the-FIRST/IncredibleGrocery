@@ -444,7 +444,7 @@ public class GameManager : MonoBehaviour
         public void ClearValues()
         {
             _selectedItems.Clear();
-            SellClicked = false;
+            ActivateSellButton(false);
             OrderSize = 0;
         }
     }
